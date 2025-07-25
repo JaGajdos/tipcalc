@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <title>Optimalizácia & Kalkulačka</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; }
+        .tabs { display: flex; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; border: 1px solid #ccc; cursor: pointer; }
+        .tab.active { background: #007BFF; color: white; }
+        .tab:not(.active):hover { background: #f2f2f2; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .inputs label { display: block; margin-top: 10px; }
+        input { width: 120px; padding: 5px; margin-left: 5px; }
+        button { padding: 10px 15px; cursor: pointer; border: none; background: #007BFF; color: white; border-radius: 5px; margin-top: 15px; }
+        button:hover { background: #0056b3; }
+        table { border-collapse: collapse; margin-top: 20px; }
+        table, th, td { border: 1px solid #ccc; padding: 8px; }
+        th { background: #f2f2f2; }
+        #status { margin-top: 10px; font-weight: bold; }
+        .result { margin-top: 20px; font-weight: bold; white-space: pre-line; }
+    </style>
+</head>
+<body>
+
+<h2>Optimalizácia & Kalkulačka</h2>
+<div class="tabs">
+    <div class="tab active" onclick="switchTab('simulacia')">Simulácia</div>
+    <div class="tab" onclick="switchTab('kalkulacka')">Kalkulačka</div>
+</div>
+
+<!-- TAB: SIMULÁCIA -->
+<div id="simulacia" class="tab-content active">
+    <div class="inputs">
+        <h3>Rozsahy a kroky</h3>
+        <label>Prvý vklad (€): <input type="number" id="initialStake" value="3"></label>
+        <label>Pravdepodobnosť výhry (%): od <input type="number" id="pMin" value="55"> do <input type="number" id="pMax" value="75"> krok <input type="number" id="pStep" value="1"></label>
+        <label>Kurz: od <input type="number" step="0.01" id="oMin" value="1.6"> do <input type="number" step="0.01" id="oMax" value="2"> krok <input type="number" step="0.01" id="oStep" value="0.05"></label>
+        <label>Koeficient: od <input type="number" step="0.01" id="cMin" value="0"> do <input type="number" step="0.01" id="cMax" value="1"> krok <input type="number" step="0.01" id="cStep" value="0.05"></label>
+        <label><input type="checkbox" id="coefFromProfitSim"> Koeficient len zo zisku</label>
+        <label>Počet dní: od <input type="number" id="dMin" value="1"> do <input type="number" id="dMax" value="30"> krok <input type="number" id="dStep" value="1"></label>
+        <label>Simulácií na kombináciu: <input type="number" id="runs" value="2000"></label>
+    </div>
+
+    <button onclick="optimize()">Spusti optimalizáciu</button>
+
+    <div id="status"></div>
+    <div id="results"></div>
+</div>
+
+<!-- TAB: KALKULAČKA -->
+<div id="kalkulacka" class="tab-content">
+    <div class="calc-container">
+        <h3>Kalkulačka</h3>
+        <label for="stake">Vklad (€):</label>
+        <input type="number" id="stake" value="3">
+
+        <label for="odds">Kurz:</label>
+        <input type="number" step="0.01" id="odds" value="1.6">
+
+        <label for="coef">Koeficient (0-1):</label>
+        <input type="number" step="0.01" id="coef" value="0.2">
+        <label><input type="checkbox" id="coefFromProfitCalc"> Koeficient len zo zisku</label>
+
+        <label for="days">Počet dní:</label>
+        <input type="number" id="days" value="10">
+
+        <label for="probability">Pravdepodobnosť výhry (%):</label>
+        <input type="number" step="0.1" id="probability" value="66">
+        <input type="checkbox" id="useProbability">
+        <label for="useProbability">Použiť pravdepodobnosť</label>
+
+        <button onclick="calculate()">Vypočítať</button>
+
+        <div class="result" id="calcResult"></div>
+    </div>
+</div>
+
+<script>
+// PREPÍNANIE TABOV
+function switchTab(tabId) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+    document.querySelector(`.tab[onclick="switchTab('${tabId}')"]`).classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+}
+
+// SIMULÁCIA
+function simulate(stake, odds, coef, days, probability, coefFromProfit, runs = 2000) {
+    let total = 0;
+    for (let r = 0; r < runs; r++) {
+        let s = stake;
+        let bank = 0;
+        for (let i = 0; i < days; i++) {
+            if (s <= 0) break;
+            let won = Math.random() * 100 < probability;
+            if (won) {
+                let newAmount = s * odds;
+                let toBank = coefFromProfit ? (newAmount - s) * coef : newAmount * coef;
+                bank += toBank;
+                s = newAmount - toBank;
+            } else {
+                s = 0;
+                break;
+            }
+        }
+        total += (s + bank);
+    }
+    return total / runs;
+}
+
+async function optimize() {
+    const stake = parseFloat(document.getElementById("initialStake").value);
+    const pMin = parseFloat(document.getElementById("pMin").value);
+    const pMax = parseFloat(document.getElementById("pMax").value);
+    const pStep = parseFloat(document.getElementById("pStep").value);
+    const oMin = parseFloat(document.getElementById("oMin").value);
+    const oMax = parseFloat(document.getElementById("oMax").value);
+    const oStep = parseFloat(document.getElementById("oStep").value);
+    const cMin = parseFloat(document.getElementById("cMin").value);
+    const cMax = parseFloat(document.getElementById("cMax").value);
+    const cStep = parseFloat(document.getElementById("cStep").value);
+    const dMin = parseInt(document.getElementById("dMin").value);
+    const dMax = parseInt(document.getElementById("dMax").value);
+    const dStep = parseInt(document.getElementById("dStep").value);
+    const runs = parseInt(document.getElementById("runs").value);
+    const coefFromProfit = document.getElementById("coefFromProfitSim").checked;
+
+    const results = [];
+    const status = document.getElementById("status");
+    status.innerText = "Počítam... môže to chvíľu trvať.";
+
+    for (let probability = pMin; probability <= pMax; probability += pStep) {
+        for (let odds = oMin; odds <= oMax; odds += oStep) {
+            for (let coef = cMin; coef <= cMax; coef += cStep) {
+                for (let days = dMin; days <= dMax; days += dStep) {
+                    const avg = simulate(stake, odds, coef, days, probability, coefFromProfit, runs);
+                    results.push({ probability: probability.toFixed(0), odds: odds.toFixed(2), coef: coef.toFixed(2), days, avg: avg.toFixed(2) });
+                }
+            }
+        }
+        await new Promise(r => setTimeout(r, 20)); // nech UI reaguje
+    }
+
+    results.sort((a, b) => b.avg - a.avg);
+    const best = results[0];
+    const top = results.slice(0, 20);
+
+    let html = `<h3>Najlepšia kombinácia:</h3>
+    <p><b>Prvotný vklad:</b> ${stake} €, <b>Pravdepodobnosť:</b> ${best.probability} %, <b>Kurz:</b> ${best.odds}, <b>Koeficient:</b> ${best.coef}, <b>Dní:</b> ${best.days}, <b>Priemer:</b> ${best.avg} €</p>`;
+
+    html += "<h3>TOP 20 kombinácií</h3><table><tr><th>Pravdepodobnosť (%)</th><th>Kurz</th><th>Koeficient</th><th>Dní</th><th>Priemer (€)</th></tr>";
+    top.forEach(r => {
+        html += `<tr><td>${r.probability}</td><td>${r.odds}</td><td>${r.coef}</td><td>${r.days}</td><td>${r.avg}</td></tr>`;
+    });
+    html += "</table>";
+
+    document.getElementById("results").innerHTML = html;
+    status.innerText = "Hotovo!";
+}
+
+// KALKULAČKA
+function expectedWinStreak(probability, simulations = 10000) {
+    let totalDays = 0;
+    for (let i = 0; i < simulations; i++) {
+        let days = 0;
+        while (Math.random() * 100 < probability) {
+            days++;
+        }
+        totalDays += days;
+    }
+    return totalDays / simulations;
+}
+
+function calculate() {
+    let stake = parseFloat(document.getElementById('stake').value) || 0;
+    const odds = parseFloat(document.getElementById('odds').value) || 0;
+    const coef = parseFloat(document.getElementById('coef').value) || 0;
+    const days = parseInt(document.getElementById('days').value) || 0;
+    const probability = parseFloat(document.getElementById('probability').value) || 0;
+    const useProbability = document.getElementById('useProbability').checked;
+    const coefFromProfit = document.getElementById('coefFromProfitCalc').checked;
+
+    let bank = 0;
+    let winDays = 0;
+    let stakeBeforeLoss = stake;
+    let bankBeforeLoss = bank;
+    let stoppedBeforeLoss = false;
+
+    for (let i = 0; i < days; i++) {
+        if (stake <= 0) break;
+        let won = true;
+        if (useProbability) {
+            won = Math.random() * 100 < probability;
+        }
+
+        if (won) {
+            let newAmount = stake * odds;
+            let toBank = coefFromProfit ? (newAmount - stake) * coef : newAmount * coef;
+            bank += toBank;
+            stake = newAmount - toBank;
+            winDays++;
+            stakeBeforeLoss = stake; 
+            bankBeforeLoss = bank; 
+        } else {
+            stoppedBeforeLoss = true;
+            stake = 0;
+            break;
+        }
+    }
+
+    const total = stake + bank;
+    const totalBeforeLoss = stoppedBeforeLoss ? (stakeBeforeLoss + bankBeforeLoss) : total;
+
+    // Analytický odhad
+    const p = probability / 100;
+    const expectedAnalytical = p > 0 ? (p / (1 - p)) : 0;
+
+    // Simulačný odhad
+    const expectedSimulated = expectedWinStreak(probability, 10000);
+
+    document.getElementById('calcResult').innerText = 
+        `Po ${days} dňoch:
+Výherné dni: ${winDays}
+Aktuálna suma: ${stake.toFixed(2)} €
+Bank: ${bank.toFixed(2)} €
+Spolu: ${total.toFixed(2)} €
+Alternatívne (deň pred prehrou): ${totalBeforeLoss.toFixed(2)} €
+
+Odhad dĺžky série (analyticky): ${expectedAnalytical.toFixed(1)} dní
+Odhad dĺžky série (simulácia): ${expectedSimulated.toFixed(1)} dní`;
+}
+</script>
+
+
+</body>
+</html>
